@@ -2,7 +2,16 @@
 
 > Bicep port of [microsoft-foundry/foundry-samples #19 — `19-private-network-agents-tools-setup`](https://github.com/microsoft-foundry/foundry-samples/tree/main/infrastructure/infrastructure-setup-bicep/19-private-network-agents-tools-setup), wrapped in the same hub-spoke + Firewall + jump-box + diagnostics structure as [`nthewara/foundry`](https://github.com/nthewara/foundry) (which is Terraform).
 
-**Status:** 🟡 Plan only — no Bicep written yet. Awaiting review.
+**Status:** ✅ Plan approved 2026-05-18. Decisions locked (see bottom). Ready to start P1.
+
+### Locked decisions
+1. **Firewall SKU** → `Basic` (cheaper for lab; we already have hardening notes for Basic-SKU + `AzureFirewallManagementSubnet`)
+2. **Bastion** → on by default
+3. **DNS zones** → local to the lab RG (no shared-RG flag)
+4. **Tool servers** → all 4 ported day-1 (a2a, mcp-http, openapi, azure-function)
+5. **`add-project`** → standalone top-level template (`add-project.bicep` + sanitised `.bicepparam.example`). Lets you add another project to an existing Foundry account post-deploy without re-running the full main template.
+6. **Lab tracker** → `foundrybicep-<rand>` when P8 lands
+7. **Layout** → **flat files at repo root**, not a `modules/` tree. One `.bicep` file per concern (mirrors `nthewara/foundry`'s flat `.tf` layout — easier to diff & port). Sub-files for `tool-servers/`, `scripts/`, `tests/`, `diagrams/`, `dashboards/` only.
 
 ---
 
@@ -59,73 +68,59 @@
 
 ---
 
-## 📁 Repo layout (proposed)
+## 📁 Repo layout (flat, mirrors `nthewara/foundry`)
 
 ```
 foundry-bicep/
-├── README.md                          # full docs (architecture, deploy, troubleshoot, costs)
+├── README.md                          # docs (architecture, deploy, troubleshoot, costs)
 ├── PLAN.md                            # this file
-├── SECURITY_REVIEW.md                 # ported from nthewara/foundry (Defender, NSG, PE posture)
-├── main.bicep                         # top-level subscription/RG-scope orchestrator
-├── main.bicepparam.example            # sanitised parameters (committed)
-├── .gitignore                         # blocks *.bicepparam (real), *.tfvars, backend.hcl
-├── modules/
-│   ├── networking/
-│   │   ├── hub-vnet.bicep             # hub VNet + AzFW/Bastion/Mgmt/Gateway subnets
-│   │   ├── spoke-vm.bicep             # VM spoke + peering
-│   │   ├── spoke-aiapp.bicep          # AI app spoke + pe/agents/mcp subnets + delegations
-│   │   ├── peering.bicep              # bidirectional hub<->spoke
-│   │   └── route-table.bicep          # UDR forcing 0.0.0.0/0 → Firewall
-│   ├── firewall/
-│   │   ├── firewall.bicep             # AzFW (Basic/Standard SKU), policy, PIP
-│   │   └── firewall-rules.bicep       # rule collection group (web + RFC1918)
-│   ├── bastion/
-│   │   └── bastion.bicep              # optional, Developer or Basic SKU
-│   ├── vm/
-│   │   └── jumpbox.bicep              # Windows jump-box NIC + VM (+ KV password ref)
-│   ├── foundry/                       # ← ported from upstream `modules-network-secured/`
-│   │   ├── vnet.bicep                 # new VNet flow (we will NOT use; spoke-aiapp covers it)
-│   │   ├── existing-vnet.bicep        # we feed our spoke-aiapp here
-│   │   ├── subnet.bicep
-│   │   ├── network-agent-vnet.bicep
-│   │   ├── private-endpoint-and-dns.bicep
-│   │   ├── standard-dependent-resources.bicep   # Cosmos + Storage + AI Search
-│   │   ├── ai-account-identity.bicep
-│   │   ├── ai-project-identity.bicep
-│   │   ├── ai-project-identity-unique.bicep
-│   │   ├── format-project-workspace-id.bicep
-│   │   ├── add-project-capability-host.bicep
-│   │   ├── validate-existing-resources.bicep
-│   │   ├── ai-search-role-assignments.bicep
-│   │   ├── azure-storage-account-role-assignment.bicep
-│   │   ├── blob-storage-container-role-assignments.bicep
-│   │   ├── blob-storage-container-role-assignments-unique.bicep
-│   │   ├── cosmos-container-role-assignments.bicep
-│   │   └── cosmosdb-account-role-assignment.bicep
-│   ├── diagnostics/
-│   │   ├── law.bicep                  # Log Analytics workspace
-│   │   ├── storage-diag.bicep         # Diagnostics archive storage account
-│   │   └── diag-setting.bicep         # reusable module: one per resource
-│   └── project/
-│       ├── add-project.bicep          # standalone project add (mirrors upstream)
-│       └── add-project.bicepparam.example
-├── add-project.bicep                  # top-level wrapper (matches upstream layout)
-├── tool-servers/                      # ported as-is from upstream, code unchanged
-│   ├── a2a-server/                    # Dockerfile + main.py + requirements.txt
+├── SECURITY_REVIEW.md                 # ported from nthewara/foundry
+├── .gitignore                         # blocks real *.bicepparam, *.tfvars, backend.hcl
+│
+├── main.bicep                         # top-level orchestrator (subscription scope)
+├── main.bicepparam.example            # sanitised params, committed
+│
+├── networking.bicep                   # hub VNet + 2 spokes + subnets + peering + UDRs
+├── firewall.bicep                     # AzFW Basic + policy + PIPs + LAW + rule groups
+├── bastion.bicep                      # Bastion (default on)
+├── vm.bicep                           # Windows jump-box (NIC + VM, KV-referenced pwd)
+├── dns.bicep                          # 6 private DNS zones + VNet links
+│
+├── foundry.bicep                      # AI Services account (PNA disabled, networkInjections)
+├── foundry-dependencies.bicep         # Cosmos + Storage + AI Search (private)
+├── foundry-identity.bicep             # account + project MIs, format workspace id
+├── foundry-capability-host.bicep      # capability host hookup
+├── foundry-roles.bicep                # all role assignments (AI Search / Storage / Cosmos / blob containers)
+├── foundry-private-endpoints.bicep    # PEs for AIS, Cosmos, Storage, AI Search + DNS A records
+│
+├── project.bicep                      # initial project (called from main.bicep)
+├── add-project.bicep                  # ★ STANDALONE: adds another project to an existing Foundry account
+├── add-project.bicepparam.example     # sanitised params for add-project
+│
+├── diagnostics.bicep                  # LAW + diag storage + all diag settings (one place, like Terraform)
+├── outputs.bicep (or in main.bicep)   # final outputs (endpoints, IDs)
+│
+├── tool-servers/                      # ported as-is from upstream
+│   ├── a2a-server/
 │   ├── mcp-http-server/
 │   ├── openapi-server/
 │   └── azure-function-server/         # incl. deploy-function.bicep
 ├── scripts/
-│   ├── createCapHost.sh               # ported from upstream
-│   ├── deleteCapHost.sh               # ported from upstream
-│   └── get-existing-resources.ps1     # ported from upstream
-├── tests/                             # ported from upstream
-│   └── …all 7 test_*_agents_v2.py + TESTING-GUIDE.md
-├── diagrams/                          # ported + regenerate with our hub-spoke
+│   ├── createCapHost.sh
+│   ├── deleteCapHost.sh
+│   └── get-existing-resources.ps1
+├── tests/                             # 7 test_*_agents_v2.py + TESTING-GUIDE.md
+├── diagrams/                          # regenerated for our hub-spoke layout
 └── dashboards/
-    ├── dashboard.json                 # from nthewara/foundry
-    └── workbook.json                  # from nthewara/foundry
+    ├── dashboard.json
+    └── workbook.json
 ```
+
+### How Bicep "modules" work with flat files
+In Bicep, `module foo 'networking.bicep' = { … }` references any peer `.bicep` file — there is no folder requirement. The layout above gives us the same one-file-per-concern feel as the Terraform repo while staying Bicep-native. `main.bicep` will reference each peer file once and pass through params.
+
+### About `add-project.bicep`
+Upstream sample #19 ships a small companion template that targets an **already-deployed** Foundry account and adds another project (with its own capability host, identity, role assignments). It's useful when you want a second project on the same account without redeploying everything, e.g. dev vs. prod isolation on shared infra. We keep it standalone so you can run `az deployment group create -f add-project.bicep -p add-project.bicepparam` after the main stack is up.
 
 ---
 
@@ -237,14 +232,9 @@ Each phase = 1 PR, reviewable in isolation. P1–P3 are pure-infra and can run b
 
 ---
 
-## 🚦 Open questions for review
+## ✅ Decisions (locked 2026-05-18)
 
-1. **Firewall SKU default** — keep `Standard` (matches nthewara/foundry) or default to `Basic` to save ~$25/day for short-lived labs?
-2. **Bastion default** — leave `bastionProvision = false` and rely on FW DNAT for RDP, or flip to `true` and skip Firewall NAT rules?
-3. **DNS zones** — upstream creates them in the same RG. Want a flag to point at an existing shared DNS RG instead (some tenants centralise these)?
-4. **Tool servers** — port all four (a2a, mcp, openapi, function) day-1, or just `mcp-http-server` + `azure-function-server` since they're the ones exercised in the tests?
-5. **`add-project` standalone** — keep upstream's pattern of a separate top-level `add-project.bicep`, or fold it into `main.bicep` behind a `param projectsToAdd array`?
-6. **Lab tracker entry** — name the lab `foundrybicep-<rand>` once we deploy P8?
+All questions answered above under "Locked decisions". Plan approved → proceeding to P1 (networking.bicep).
 
 ---
 
