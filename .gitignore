@@ -1,0 +1,31 @@
+# Terraform leftovers (not used here, but kept consistent with sibling repos)
+terraform.tfvars
+*.auto.tfvars
+backend.hcl
+.terraform/
+*.tfstate
+*.tfstate.backup
+
+# Bicep — real parameter files (only *.example committed)
+*.bicepparam
+!*.bicepparam.example
+
+# Build artifacts
+main.json
+**/main.json
+*.bicep.json
+
+# Editors / OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*~
+
+# Python tool-server local dev
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+local.settings.json
