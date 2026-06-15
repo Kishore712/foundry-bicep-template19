@@ -21,6 +21,7 @@ param privateDnsZones array = [
   'privatelink.blob.core.windows.net'
   'privatelink.search.windows.net'
   'privatelink.documents.azure.com'
+  'privatelink.azurecr.io'
 ]
 
 @description('Resource ID of the hub VNet to link each zone to.')

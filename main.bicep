@@ -100,9 +100,17 @@ param privateDnsZones array = [
   'privatelink.blob.${environment().suffixes.storage}'
   'privatelink.search.windows.net'
   'privatelink.documents.azure.com'
+  'privatelink.azurecr.io'
 ]
 
 // -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// ACR parameters
+// -----------------------------------------------------------------------------
+
+@description('Logical name component for the Azure Container Registry.')
+param acrNameBase string = 'foundryacr'
+
 // Foundry parameters
 // -----------------------------------------------------------------------------
 
@@ -279,6 +287,7 @@ var aiSearchName = '${aiSearchNameBase}${suffix}'
 var cosmosDBName = '${cosmosDBNameBase}${suffix}'
 var azureStorageName = toLower('${azureStorageNameBase}${suffix}')
 var aiServicesName = '${aiServicesNameBase}${suffix}'
+var acrName = toLower('${acrNameBase}${suffix}')
 
 module foundryDeps 'foundry-dependencies.bicep' = {
   name: 'foundryDeps'
@@ -294,6 +303,20 @@ module foundryDeps 'foundry-dependencies.bicep' = {
     aiSearchExists: false
     azureStorageExists: false
     cosmosDBExists: false
+  }
+}
+
+// =============================================================================
+// Stage 7b — Azure Container Registry (Premium, private-only)
+// =============================================================================
+
+module acr 'acr.bicep' = {
+  name: 'acr'
+  scope: rg
+  params: {
+    acrName: acrName
+    location: location
+    tags: tags
   }
 }
 
@@ -356,6 +379,7 @@ module foundryPe 'foundry-private-endpoints.bicep' = {
     aiSearchName: foundryDeps.outputs.aiSearchName
     storageName: foundryDeps.outputs.azureStorageName
     cosmosDBName: foundryDeps.outputs.cosmosDBName
+    acrName: acr.outputs.acrName
     vnetName: networking.outputs.aiappVnetName
     peSubnetName: networking.outputs.peSubnetName
     suffix: suffix
@@ -366,6 +390,7 @@ module foundryPe 'foundry-private-endpoints.bicep' = {
       aiSearch: dns.outputs.zoneIds['privatelink.search.windows.net']
       storageBlob: dns.outputs.zoneIds[storageBlobZone]
       cosmosDB: dns.outputs.zoneIds['privatelink.documents.azure.com']
+      acr: dns.outputs.zoneIds['privatelink.azurecr.io']
     }
   }
 }

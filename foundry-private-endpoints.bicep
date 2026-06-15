@@ -22,6 +22,9 @@ param aiAccountName string
 param aiSearchName string
 @description('Name of the Storage Account.')
 param storageName string
+@description('Name of the Azure Container Registry.')
+param acrName string
+
 @description('Name of the Cosmos DB account.')
 param cosmosDBName string
 
@@ -79,6 +82,11 @@ resource cosmosDBAccount 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' exis
   scope: resourceGroup(cosmosDBSubscriptionId, cosmosDBResourceGroupName)
 }
 
+
+resource acrRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = {
+  name: acrName
+  scope: resourceGroup()
+}
 resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' existing = {
   name: vnetName
   scope: resourceGroup(vnetSubscriptionId, vnetResourceGroupName)
@@ -165,6 +173,24 @@ resource cosmosDBPrivateEndpoint 'Microsoft.Network/privateEndpoints@2024-05-01'
   }
 }
 
+// ---- ACR Private Endpoint ----
+resource acrPrivateEndpoint 'Microsoft.Network/privateEndpoints@2024-05-01' = {
+  name: '${acrName}-private-endpoint'
+  location: resourceGroup().location
+  properties: {
+    subnet: { id: peSubnet.id }
+    privateLinkServiceConnections: [
+      {
+        name: '${acrName}-private-link-service-connection'
+        properties: {
+          privateLinkServiceId: acrRegistry.id
+          groupIds: ['registry']
+        }
+      }
+    ]
+  }
+}
+
 // ---- Fabric Private Endpoint (optional) ----
 resource fabricPrivateEndpoint 'Microsoft.Network/privateEndpoints@2024-05-01' = if (fabricPassedIn) {
   name: '${fabricWorkspaceName}-fabric-private-endpoint'
@@ -226,6 +252,16 @@ resource cosmosDBDnsGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGrou
   }
 }
 
+
+resource acrDnsGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2024-05-01' = {
+  parent: acrPrivateEndpoint
+  name: '${acrName}-dns-group'
+  properties: {
+    privateDnsZoneConfigs: [
+      { name: '${acrName}-dns-config', properties: { privateDnsZoneId: dnsZoneIds.acr } }
+    ]
+  }
+}
 resource fabricDnsGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2024-05-01' = if (fabricPassedIn) {
   parent: fabricPrivateEndpoint
   name: '${fabricWorkspaceName}-dns-group'
