@@ -44,7 +44,10 @@ param aiSearchName string
 @description('Resource ID of the AI Services account (for role assignment).')
 param aiServicesResourceId string
 
-var setupScript = 'pip install azure-ai-projects azure-identity openai requests -q 2>/dev/null && echo "SDK installed. Run: python3 /opt/test_agent.py" && sleep 86400'
+@description('URL to the test script (raw GitHub URL). Defaults to the repo branch.')
+param testScriptUrl string = 'https://raw.githubusercontent.com/Kishore712/foundry-bicep-template19/kishorebr/updated-private-acr/tests/test_private_acr_agents.py'
+
+var setupScript = 'pip install azure-ai-projects azure-identity openai requests -q 2>/dev/null && curl -sL ${testScriptUrl} -o /opt/test_agent.py && chmod +x /opt/test_agent.py && echo "Ready. Run: python3 /opt/test_agent.py" && sleep 86400'
 
 resource containerGroup 'Microsoft.ContainerInstance/containerGroups@2023-05-01' = {
   name: containerGroupName
