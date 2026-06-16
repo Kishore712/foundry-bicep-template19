@@ -207,6 +207,20 @@ resource aiappVnet 'Microsoft.Network/virtualNetworks@2024-01-01' = {
           ]
         }
       }
+      {
+        name: 'aci-test'
+        properties: {
+          addressPrefix: '${aiappBase}.64/26'
+          delegations: [
+            {
+              name: 'Microsoft.ContainerInstance.containerGroups'
+              properties: {
+                serviceName: 'Microsoft.ContainerInstance/containerGroups'
+              }
+            }
+          ]
+        }
+      }
     ]
   }
 }
@@ -300,5 +314,7 @@ output agentsSubnetId string = '${aiappVnet.id}/subnets/agents'
 output agentsSubnetName string = 'agents'
 output mcpSubnetId string = '${aiappVnet.id}/subnets/mcp'
 output mcpSubnetName string = 'mcp'
+output aciTestSubnetId string = '${aiappVnet.id}/subnets/aci-test'
+output aciTestSubnetName string = 'aci-test'
 
 output routeTableId string = createRouteTable ? routeTable.id : ''

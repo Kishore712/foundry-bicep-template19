@@ -22,8 +22,16 @@ param aiAccountName string
 param aiSearchName string
 @description('Name of the Storage Account.')
 param storageName string
-@description('Name of the Azure Container Registry.')
-param acrName string
+@description('Name of the Azure Container Registry (used when ACR is in the same RG).')
+param acrName string = ''
+
+@description('Full ARM resource ID of the ACR (BYO mode — use when ACR is in a different subscription/RG).')
+param acrResourceId string = ''
+
+@description('Subscription containing the ACR.')
+param acrSubscriptionId string = subscription().subscriptionId
+@description('Resource group containing the ACR.')
+param acrResourceGroupName string = resourceGroup().name
 
 @description('Name of the Cosmos DB account.')
 param cosmosDBName string
@@ -83,9 +91,12 @@ resource cosmosDBAccount 'Microsoft.DocumentDB/databaseAccounts@2024-11-15' exis
 }
 
 
+// ACR: resolve name from resource ID if BYO, otherwise use param
+var resolvedAcrName = !empty(acrResourceId) ? last(split(acrResourceId, '/')) : acrName
+
 resource acrRegistry 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = {
-  name: acrName
-  scope: resourceGroup()
+  name: resolvedAcrName
+  scope: resourceGroup(acrSubscriptionId, acrResourceGroupName)
 }
 resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' existing = {
   name: vnetName
@@ -175,13 +186,13 @@ resource cosmosDBPrivateEndpoint 'Microsoft.Network/privateEndpoints@2024-05-01'
 
 // ---- ACR Private Endpoint ----
 resource acrPrivateEndpoint 'Microsoft.Network/privateEndpoints@2024-05-01' = {
-  name: '${acrName}-private-endpoint'
+  name: '${resolvedAcrName}-private-endpoint'
   location: resourceGroup().location
   properties: {
     subnet: { id: peSubnet.id }
     privateLinkServiceConnections: [
       {
-        name: '${acrName}-private-link-service-connection'
+        name: '${resolvedAcrName}-private-link-service-connection'
         properties: {
           privateLinkServiceId: acrRegistry.id
           groupIds: ['registry']
@@ -255,10 +266,10 @@ resource cosmosDBDnsGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGrou
 
 resource acrDnsGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2024-05-01' = {
   parent: acrPrivateEndpoint
-  name: '${acrName}-dns-group'
+  name: '${resolvedAcrName}-dns-group'
   properties: {
     privateDnsZoneConfigs: [
-      { name: '${acrName}-dns-config', properties: { privateDnsZoneId: dnsZoneIds.acr } }
+      { name: '${resolvedAcrName}-dns-config', properties: { privateDnsZoneId: dnsZoneIds.acr } }
     ]
   }
 }

@@ -108,8 +108,18 @@ param privateDnsZones array = [
 // ACR parameters
 // -----------------------------------------------------------------------------
 
-@description('Logical name component for the Azure Container Registry.')
+@description('Logical name component for a NEW Azure Container Registry. Ignored when existingAcrResourceId is set.')
 param acrNameBase string = 'foundryacr'
+
+@description('Full ARM resource ID of an existing (BYO) ACR with public access disabled. Leave empty to create a new ACR.')
+param existingAcrResourceId string = ''
+
+// -----------------------------------------------------------------------------
+// ACI test container parameters
+// -----------------------------------------------------------------------------
+
+@description('Deploy an ACI test container in the VNet for validation. The container is pre-loaded with the E2E test script.')
+param aciTestDeploy bool = true
 
 // Foundry parameters
 // -----------------------------------------------------------------------------
@@ -308,6 +318,7 @@ module foundryDeps 'foundry-dependencies.bicep' = {
 
 // =============================================================================
 // Stage 7b — Azure Container Registry (Premium, private-only)
+//            Supports BYO: pass existingAcrResourceId to skip creation.
 // =============================================================================
 
 module acr 'acr.bicep' = {
@@ -316,6 +327,7 @@ module acr 'acr.bicep' = {
   params: {
     acrName: acrName
     location: location
+    existingAcrResourceId: existingAcrResourceId
     tags: tags
   }
 }
@@ -493,6 +505,28 @@ module diagnostics 'diagnostics.bicep' = {
 }
 
 // =============================================================================
+// Stage 13 — ACI test container (optional, for E2E validation from within VNet)
+// =============================================================================
+
+module aciTest 'aci-test.bicep' = if (aciTestDeploy) {
+  name: 'aciTest'
+  scope: rg
+  params: {
+    location: location
+    subnetId: networking.outputs.aciTestSubnetId
+    aiServicesName: aiServicesName
+    projectName: projectName
+    acrHost: acr.outputs.acrLoginServer
+    acrRegion: location
+    cosmosDBName: cosmosDBName
+    storageName: azureStorageName
+    aiSearchName: aiSearchName
+    aiServicesResourceId: foundry.outputs.accountID
+  }
+  dependsOn: [ foundryPe, rolesPost ]
+}
+
+// =============================================================================
 // Outputs
 // =============================================================================
 
@@ -512,3 +546,6 @@ output projectName string = projectMod.outputs.projectName
 output projectId string = projectMod.outputs.projectId
 output capabilityHostName string = capHost.outputs.projectCapHost
 output lawId string = diagnostics.outputs.lawId
+output acrLoginServer string = acr.outputs.acrLoginServer
+#disable-next-line BCP318
+output aciTestContainer string = aciTestDeploy ? aciTest.outputs.containerGroupName : ''
